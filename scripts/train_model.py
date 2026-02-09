@@ -2,6 +2,10 @@
 Pokemon Battle Predictor - AI Training System
 Train machine learning modellen om Pokemon gevechten te voorspellen.
 """
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'types'))
+
 from typing import Dict, Any, Tuple, List
 import pandas as pd
 import numpy as np

@@ -7,12 +7,15 @@ Usage:
     python generate_battles.py --count 50     # Genereer 50 battles
     python generate_battles.py --legendary    # Alleen legendary Pokemon
 """
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'types'))
+
 from typing import List, Dict, Any
 import pandas as pd
 import numpy as np
 import pickle
 import json
-import sys
 from datetime import datetime
 
 from pokemon_types import calculate_type_advantage, get_offensive_matchup

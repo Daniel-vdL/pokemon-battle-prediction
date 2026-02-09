@@ -6,11 +6,14 @@ Gebruik:
     python predict.py "Pokemon1" "Pokemon2"
     python predict.py  (voor interactieve mode)
 """
+import sys
+import os
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'types'))
+
 from typing import Optional, Dict, Any
 import pandas as pd
 import pickle
-import sys
-import os
 
 from pokemon_types import (
     calculate_type_advantage,

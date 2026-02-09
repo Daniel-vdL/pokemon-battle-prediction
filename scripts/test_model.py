@@ -2,6 +2,10 @@
 Pokemon Battle Predictor - Quick Validation Test
 Simpele test voor snelle verificatie van model performance.
 """
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / 'types'))
+
 from typing import Dict
 import pandas as pd
 import pickle

@@ -20,7 +20,7 @@ def quick_test() -> None:
         model_data = pickle.load(f)
     
     model = model_data["model"]
-    pokemon = pd.read_csv("archive/pokemon.csv")
+    pokemon = pd.read_csv("datasets/pokemon.csv")
     
     # Bekende test cases met verwachte uitkomsten
     test_cases = [

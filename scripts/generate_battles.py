@@ -33,7 +33,7 @@ class BattleGenerator:
             self.model_data = pickle.load(f)
         
         self.model = self.model_data["model"]
-        self.pokemon = pd.read_csv("archive/pokemon.csv")
+        self.pokemon = pd.read_csv("datasets/pokemon.csv")
         print(f"✓ Loaded {len(self.pokemon)} Pokemon\n")
     
     def generate_random_battles(self, count: int = 10, 

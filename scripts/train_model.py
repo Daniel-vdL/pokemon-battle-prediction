@@ -18,8 +18,8 @@ from pokemon_types import calculate_type_advantage
 class PokemonBattlePredictor:
     """Class voor het trainen en evalueren van Pokemon battle prediction modellen."""
     
-    def __init__(self, pokemon_csv: str = "archive/pokemon.csv", 
-                 combats_csv: str = "archive/combats.csv") -> None:
+    def __init__(self, pokemon_csv: str = "datasets/pokemon.csv", 
+                 combats_csv: str = "datasets/combats.csv") -> None:
         """
         Initialiseer de battle predictor.
         

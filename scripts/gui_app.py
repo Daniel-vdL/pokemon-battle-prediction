@@ -110,7 +110,7 @@ class BattlePredictorGUI:
         selector.pack(fill=tk.X, pady=(0, 8))
 
         ttk.Label(selector, text="Pokemon 1").grid(row=0, column=0, sticky=tk.W)
-        ttk.Label(selector, text="Pokemon 2").grid(row=0, column=1, sticky=tk.W)
+        ttk.Label(selector, text="Pokemon 2").grid(row=0, column=2, sticky=tk.W)
 
         self.pokemon_p1_var = tk.StringVar()
         self.pokemon_p2_var = tk.StringVar()
@@ -121,11 +121,18 @@ class BattlePredictorGUI:
         self.pokemon_p2_combo = ttk.Combobox(
             selector, textvariable=self.pokemon_p2_var, values=self.pokemon_names, state="normal"
         )
-        self.pokemon_p1_combo.grid(row=1, column=0, sticky=tk.EW, padx=(0, 8))
-        self.pokemon_p2_combo.grid(row=1, column=1, sticky=tk.EW)
+        self._attach_search(self.pokemon_p1_combo)
+        self._attach_search(self.pokemon_p2_combo)
+        self.pokemon_p1_combo.grid(row=1, column=0, sticky=tk.EW)
+        self.pokemon_p2_combo.grid(row=1, column=2, sticky=tk.EW)
+
+        clear_p1 = ttk.Button(selector, text="x", width=2, command=lambda: self._clear_var(self.pokemon_p1_var))
+        clear_p2 = ttk.Button(selector, text="x", width=2, command=lambda: self._clear_var(self.pokemon_p2_var))
+        clear_p1.grid(row=1, column=1, sticky=tk.W, padx=(4, 12))
+        clear_p2.grid(row=1, column=3, sticky=tk.W, padx=(4, 0))
 
         selector.columnconfigure(0, weight=1)
-        selector.columnconfigure(1, weight=1)
+        selector.columnconfigure(2, weight=1)
 
         buttons = ttk.Frame(parent)
         buttons.pack(fill=tk.X, pady=(8, 8))
@@ -174,14 +181,25 @@ class BattlePredictorGUI:
             b_combo = ttk.Combobox(
                 selector, textvariable=b_var, values=self.pokemon_names, state="normal"
             )
-            a_combo.grid(row=idx + 1, column=0, sticky=tk.EW, padx=(0, 8), pady=2)
-            b_combo.grid(row=idx + 1, column=1, sticky=tk.EW, pady=2)
+            self._attach_search(a_combo)
+            self._attach_search(b_combo)
+            a_combo.grid(row=idx + 1, column=0, sticky=tk.EW, pady=2)
+            b_combo.grid(row=idx + 1, column=2, sticky=tk.EW, pady=2)
+
+            clear_a = ttk.Button(
+                selector, text="x", width=2, command=lambda v=a_var: self._clear_var(v)
+            )
+            clear_b = ttk.Button(
+                selector, text="x", width=2, command=lambda v=b_var: self._clear_var(v)
+            )
+            clear_a.grid(row=idx + 1, column=1, sticky=tk.W, padx=(4, 12), pady=2)
+            clear_b.grid(row=idx + 1, column=3, sticky=tk.W, padx=(4, 0), pady=2)
 
             self.team_a_combos.append(a_combo)
             self.team_b_combos.append(b_combo)
 
         selector.columnconfigure(0, weight=1)
-        selector.columnconfigure(1, weight=1)
+        selector.columnconfigure(2, weight=1)
 
         buttons = ttk.Frame(parent)
         buttons.pack(fill=tk.X, pady=(0, 8))
@@ -205,6 +223,27 @@ class BattlePredictorGUI:
                 self.team_b_vars[idx].set(
                     self.pokemon_names[(idx + 1) % len(self.pokemon_names)]
                 )
+
+    def _attach_search(self, combo: ttk.Combobox) -> None:
+        combo.bind("<KeyRelease>", lambda event, c=combo: self._schedule_filter(c, event))
+
+    def _schedule_filter(self, combo: ttk.Combobox, event: tk.Event) -> None:
+        timer_id = getattr(combo, "_filter_after_id", None)
+        if timer_id:
+            combo.after_cancel(timer_id)
+        combo._filter_after_id = combo.after(120, lambda: self._filter_combobox(combo))
+
+    def _filter_combobox(self, combo: ttk.Combobox) -> None:
+        query = combo.get().strip().lower()
+        if not query:
+            values = self.pokemon_names
+        else:
+            values = [name for name in self.pokemon_names if query in name.lower()]
+        combo.configure(values=values)
+
+    def _clear_var(self, var: tk.StringVar) -> None:
+        var.set("")
+
 
     def _on_swap_pokemon(self) -> None:
         p1 = self.pokemon_p1_var.get()

@@ -1,71 +1,54 @@
-# Pokemon Battle Prediction
+# 🎮 Pokemon Battle Predictor
 
-AI-powered Pokemon battle outcome predictor using machine learning.
+Predict Pokemon battle outcomes using machine learning! Features a desktop GUI with search, type matchup analysis, and win probability predictions.
 
-## Setup
+## 🚀 Quick Start
 
-### 1. Create Virtual Environment
+1. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-python -m venv .venv
-```
+2. **Train the model** (first time only):
+   ```bash
+   python scripts/train_model.py
+   ```
 
-### 2. Activate Virtual Environment
+3. **Launch the GUI:**
+   - **Windows:** Double-click `start_gui.bat`
+   - **Any OS:** `python run.py`
 
-**Windows:**
-```bash
-.venv\Scripts\activate
-```
+## 📋 Features
 
-**macOS/Linux:**
-```bash
-source .venv/bin/activate
-```
+- **Interactive GUI** - Easy-to-use desktop interface
+- **Search** - Type to find Pokemon instantly
+- **Smart Predictions** - ML model trained on 50,000+ battles
+- **Type Advantages** - Detailed offensive matchup analysis
+- **Battle Stats** - Compare HP, Attack, Defense, Speed, and more
 
-### 3. Install Dependencies
+## 🔧 Advanced Usage
 
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-### Train the Model
-
-```bash
-python scripts/train_model.py
-```
-
-### Predict Battles
-
+**Command-line predictions:**
 ```bash
 python scripts/predict.py "Pikachu" "Charmander"
 ```
 
-Or run in interactive mode:
-```bash
-python scripts/predict.py
-```
-
-### Generate Random Battles
-
+**Generate random battles:**
 ```bash
 python scripts/generate_battles.py --count 10
 ```
 
-### Test Model
-
+**Test model accuracy:**
 ```bash
 python scripts/test_model.py
 ```
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 pokemon-battle-prediction/
-├── datasets/           # Pokemon and battle datasets
-├── scripts/            # Python scripts
-├── types/              # Type advantage calculations
-├── requirements.txt    # Python dependencies
-└── README.md          # This file
+├── datasets/          # Pokemon and battle data
+├── scripts/           # Training, prediction, GUI
+├── types/             # Type advantage logic
+└── start_gui.bat      # Quick launcher (Windows)
 ```

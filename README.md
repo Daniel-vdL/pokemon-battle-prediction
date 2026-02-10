@@ -1,32 +1,22 @@
-# Pokemon Battle Prediction
+# Pokemon Battle Predictor
 
-AI-powered Pokemon battle outcome predictor using machine learning.
+Predict Pokemon battle outcomes using machine learning. Includes a desktop GUI, type matchup analysis, and win probability predictions.
 
-## Setup
+## Quick Start
 
-### 1. Create Virtual Environment
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-python -m venv .venv
-```
+2. Train the model (first time only):
+   ```bash
+   python scripts/train_model.py
+   ```
 
-### 2. Activate Virtual Environment
-
-**Windows:**
-```bash
-.venv\Scripts\activate
-```
-
-**macOS/Linux:**
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
+3. Launch the GUI:
+   - Windows: double-click `start_gui.bat`
+   - Any OS: `python run.py`
 
 ## Usage
 
@@ -101,5 +91,6 @@ pokemon-battle-prediction/
 ├── scripts/            # Python scripts
 ├── types/              # Type advantage calculations
 ├── requirements.txt    # Python dependencies
-└── README.md          # This file
+├── run.py              # GUI launcher
+└── start_gui.bat       # Windows GUI launcher
 ```

@@ -1,32 +1,22 @@
-# Pokemon Battle Prediction
+# Pokemon Battle Predictor
 
-AI-powered Pokemon battle outcome predictor using machine learning.
+Predict Pokemon battle outcomes using machine learning. Includes a desktop GUI, type matchup analysis, and win probability predictions.
 
-## Setup
+## Quick Start
 
-### 1. Create Virtual Environment
+1. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-python -m venv .venv
-```
+2. Train the model (first time only):
+   ```bash
+   python scripts/train_model.py
+   ```
 
-### 2. Activate Virtual Environment
-
-**Windows:**
-```bash
-.venv\Scripts\activate
-```
-
-**macOS/Linux:**
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
+3. Launch the GUI:
+   - Windows: double-click `start_gui.bat`
+   - Any OS: `python run.py`
 
 ## Usage
 
@@ -34,6 +24,12 @@ pip install -r requirements.txt
 
 ```bash
 python scripts/train_model.py
+```
+
+### Train the Team Model
+
+```bash
+python scripts/train_team_model.py
 ```
 
 ### Predict Battles
@@ -45,6 +41,28 @@ python scripts/predict.py "Pikachu" "Charmander"
 Or run in interactive mode:
 ```bash
 python scripts/predict.py
+```
+
+### Predict Team Battles
+
+```bash
+python scripts/predict.py --team 1 2
+```
+
+### Launch the GUI
+
+```bash
+python scripts/gui_app.py
+```
+
+Or use the quick launchers:
+```bash
+python run.py
+```
+
+Windows:
+```bash
+start_gui.bat
 ```
 
 ### Generate Random Battles
@@ -59,6 +77,12 @@ python scripts/generate_battles.py --count 10
 python scripts/test_model.py
 ```
 
+### Test Team Model
+
+```bash
+python scripts/test_team_model.py
+```
+
 ## Project Structure
 
 ```
@@ -67,5 +91,6 @@ pokemon-battle-prediction/
 ├── scripts/            # Python scripts
 ├── types/              # Type advantage calculations
 ├── requirements.txt    # Python dependencies
-└── README.md          # This file
+├── run.py              # GUI launcher
+└── start_gui.bat       # Windows GUI launcher
 ```

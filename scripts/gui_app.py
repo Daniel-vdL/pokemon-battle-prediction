@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import pickle
 import tkinter as tk
 from tkinter import ttk, messagebox
+import threading
 
 import pandas as pd
 
@@ -22,6 +23,11 @@ from team_features import (
     build_team_features,
     build_team_type_map,
 )
+
+# Import training classes
+sys.path.append(str(Path(__file__).parent))
+from train_model import PokemonBattlePredictor
+from train_team_model import TeamBattlePredictor
 
 
 class BattlePredictorGUI:
@@ -99,11 +105,14 @@ class BattlePredictorGUI:
 
         pokemon_tab = ttk.Frame(notebook)
         team_tab = ttk.Frame(notebook)
+        settings_tab = ttk.Frame(notebook)
         notebook.add(pokemon_tab, text="Pokemon")
         notebook.add(team_tab, text="Team")
+        notebook.add(settings_tab, text="Settings")
 
         self._build_pokemon_tab(pokemon_tab)
         self._build_team_tab(team_tab)
+        self._build_settings_tab(settings_tab)
 
     def _build_pokemon_tab(self, parent: ttk.Frame) -> None:
         selector = ttk.Frame(parent)
@@ -223,6 +232,84 @@ class BattlePredictorGUI:
                 self.team_b_vars[idx].set(
                     self.pokemon_names[(idx + 1) % len(self.pokemon_names)]
                 )
+
+    def _build_settings_tab(self, parent: ttk.Frame) -> None:
+        """Build the settings tab for training models."""
+        container = ttk.Frame(parent, padding=12)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(
+            container,
+            text="Model Training",
+            font=("Segoe UI", 12, "bold")
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        # Pokemon Model Section
+        pokemon_frame = ttk.LabelFrame(container, text="Pokemon Battle Model", padding=12)
+        pokemon_frame.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Label(
+            pokemon_frame,
+            text="Train the AI model for 1v1 Pokemon battles"
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        pokemon_btn_frame = ttk.Frame(pokemon_frame)
+        pokemon_btn_frame.pack(fill=tk.X)
+
+        self.train_pokemon_btn = ttk.Button(
+            pokemon_btn_frame,
+            text="Train Pokemon Model",
+            command=self._on_train_pokemon_model
+        )
+        self.train_pokemon_btn.pack(side=tk.LEFT)
+
+        self.pokemon_training_status = ttk.Label(pokemon_btn_frame, text="")
+        self.pokemon_training_status.pack(side=tk.LEFT, padx=(12, 0))
+
+        # Team Model Section
+        team_frame = ttk.LabelFrame(container, text="Team Battle Model", padding=12)
+        team_frame.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Label(
+            team_frame,
+            text="Train the AI model for 6v6 team battles"
+        ).pack(anchor=tk.W, pady=(0, 8))
+
+        team_btn_frame = ttk.Frame(team_frame)
+        team_btn_frame.pack(fill=tk.X)
+
+        self.train_team_btn = ttk.Button(
+            team_btn_frame,
+            text="Train Team Model",
+            command=self._on_train_team_model
+        )
+        self.train_team_btn.pack(side=tk.LEFT)
+
+        self.team_training_status = ttk.Label(team_btn_frame, text="")
+        self.team_training_status.pack(side=tk.LEFT, padx=(12, 0))
+
+        # Output log
+        ttk.Label(
+            container,
+            text="Training Log",
+            font=("Segoe UI", 10, "bold")
+        ).pack(anchor=tk.W, pady=(8, 4))
+
+        log_frame = ttk.Frame(container)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.training_log = tk.Text(log_frame, height=15, wrap=tk.WORD, state=tk.DISABLED)
+        scrollbar = ttk.Scrollbar(log_frame, command=self.training_log.yview)
+        self.training_log.configure(yscrollcommand=scrollbar.set)
+        
+        self.training_log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        ttk.Button(
+            container,
+            text="Clear Log",
+            command=lambda: self._set_output(self.training_log, "")
+        ).pack(anchor=tk.W, pady=(8, 0))
 
     def _attach_search(self, combo: ttk.Combobox) -> None:
         combo.bind("<KeyRelease>", lambda event, c=combo: self._schedule_filter(c, event))
@@ -460,6 +547,172 @@ class BattlePredictorGUI:
                 return None
             ids.append(pid)
         return ids
+
+    def _on_train_pokemon_model(self) -> None:
+        """Train the Pokemon battle model in a background thread."""
+        if messagebox.askyesno(
+            "Train Model",
+            "This will train a new Pokemon battle model. This may take a few minutes.\n\nContinue?"
+        ):
+            self.train_pokemon_btn.configure(state=tk.DISABLED)
+            self.pokemon_training_status.configure(text="Training...", foreground="#0066cc")
+            self._log_training("Starting Pokemon model training...")
+            
+            # Run training in background thread
+            thread = threading.Thread(target=self._train_pokemon_model_thread, daemon=True)
+            thread.start()
+
+    def _train_pokemon_model_thread(self) -> None:
+        """Background thread for training Pokemon model."""
+        try:
+            base_path = Path(__file__).parent.parent
+            
+            # Create predictor and train
+            predictor = PokemonBattlePredictor(
+                pokemon_csv=str(base_path / "datasets" / "pokemon.csv"),
+                combats_csv=str(base_path / "datasets" / "combats.csv")
+            )
+            
+            self._log_training("Loading data...")
+            predictor.load_data()
+            
+            self._log_training("Preparing features...")
+            predictor.prepare_features()
+            
+            self._log_training("Creating train/test split...")
+            predictor.prepare_train_test_split()
+            
+            self._log_training("Training models (this may take a moment)...")
+            results = predictor.train_models()
+            
+            self._log_training("Selecting best model...")
+            predictor.select_best_model(results)
+            
+            self._log_training("Saving model...")
+            predictor.save_model(str(base_path / "pokemon_model.pkl"))
+            
+            # Log results
+            best_acc = results[predictor.best_model_name]["accuracy"]
+            self._log_training(f"\n✅ Training complete!")
+            self._log_training(f"Best model: {predictor.best_model_name}")
+            self._log_training(f"Test accuracy: {best_acc:.4f} ({best_acc*100:.2f}%)")
+            
+            # Reload the model in the GUI
+            self.root.after(0, self._reload_pokemon_model)
+            self.root.after(0, lambda: self.pokemon_training_status.configure(
+                text="Training complete!", foreground="#008800"
+            ))
+            
+        except Exception as e:
+            error_msg = f"❌ Error: {str(e)}"
+            self._log_training(error_msg)
+            self.root.after(0, lambda: self.pokemon_training_status.configure(
+                text="Training failed!", foreground="#cc0000"
+            ))
+        finally:
+            self.root.after(0, lambda: self.train_pokemon_btn.configure(state=tk.NORMAL))
+
+    def _on_train_team_model(self) -> None:
+        """Train the team battle model in a background thread."""
+        if messagebox.askyesno(
+            "Train Model",
+            "This will train a new team battle model. This may take a few minutes.\n\nContinue?"
+        ):
+            self.train_team_btn.configure(state=tk.DISABLED)
+            self.team_training_status.configure(text="Training...", foreground="#0066cc")
+            self._log_training("Starting team model training...")
+            
+            # Run training in background thread
+            thread = threading.Thread(target=self._train_team_model_thread, daemon=True)
+            thread.start()
+
+    def _train_team_model_thread(self) -> None:
+        """Background thread for training team model."""
+        try:
+            base_path = Path(__file__).parent.parent
+            
+            # Create predictor and train
+            predictor = TeamBattlePredictor(
+                pokemon_csv=str(base_path / "datasets" / "pokemon.csv"),
+                teams_csv=str(base_path / "datasets" / "pokemon_id_each_team.csv"),
+                battles_csv=str(base_path / "datasets" / "team_combat.csv")
+            )
+            
+            self._log_training("Loading team data...")
+            predictor.load_data()
+            
+            self._log_training("Building team features...")
+            predictor.prepare_features()
+            
+            self._log_training("Training models (this may take a moment)...")
+            results = predictor.train_models()
+            
+            self._log_training("Selecting best model...")
+            predictor.select_best_model(results)
+            
+            self._log_training("Saving model...")
+            predictor.save_model(str(base_path / "team_model.pkl"))
+            
+            # Log results
+            best_acc = results[predictor.best_model_name]["accuracy"]
+            self._log_training(f"\n✅ Training complete!")
+            self._log_training(f"Best model: {predictor.best_model_name}")
+            self._log_training(f"Test accuracy: {best_acc:.4f} ({best_acc*100:.2f}%)")
+            
+            # Reload the model in the GUI
+            self.root.after(0, self._reload_team_model)
+            self.root.after(0, lambda: self.team_training_status.configure(
+                text="Training complete!", foreground="#008800"
+            ))
+            
+        except Exception as e:
+            error_msg = f"❌ Error: {str(e)}"
+            self._log_training(error_msg)
+            self.root.after(0, lambda: self.team_training_status.configure(
+                text="Training failed!", foreground="#cc0000"
+            ))
+        finally:
+            self.root.after(0, lambda: self.train_team_btn.configure(state=tk.NORMAL))
+
+    def _reload_pokemon_model(self) -> None:
+        """Reload the Pokemon model after training."""
+        try:
+            self._load_model()
+            messagebox.showinfo(
+                "Model Updated",
+                "Pokemon battle model has been updated successfully!"
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to reload model: {str(e)}")
+
+    def _reload_team_model(self) -> None:
+        """Reload the team model after training."""
+        try:
+            self._load_team_model()
+            
+            # Re-enable team tab if it was previously disabled
+            if self.team_model is not None:
+                self.team_predict_btn.configure(state=tk.NORMAL)
+                for combo in self.team_a_combos + self.team_b_combos:
+                    combo.configure(state="normal")
+            
+            messagebox.showinfo(
+                "Model Updated",
+                "Team battle model has been updated successfully!"
+            )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to reload model: {str(e)}")
+
+    def _log_training(self, message: str) -> None:
+        """Append a message to the training log (thread-safe)."""
+        def append():
+            self.training_log.configure(state=tk.NORMAL)
+            self.training_log.insert(tk.END, message + "\n")
+            self.training_log.see(tk.END)
+            self.training_log.configure(state=tk.DISABLED)
+        
+        # Schedule on main thread
+        self.root.after(0, append)
 
 
 def main() -> None:

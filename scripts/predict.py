@@ -9,9 +9,10 @@ Gebruik:
 import sys
 import os
 from pathlib import Path
+import argparse
 sys.path.append(str(Path(__file__).parent.parent / 'types'))
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import pandas as pd
 import pickle
 
@@ -19,6 +20,11 @@ from pokemon_types import (
     calculate_type_advantage,
     get_offensive_matchup,
     format_type_matchup_info
+)
+from team_features import (
+    build_single_matchup_features,
+    build_team_features,
+    build_team_type_map,
 )
 
 
@@ -209,42 +215,149 @@ class BattlePredictor:
         print("=" * 60 + "\n")
 
 
+class TeamBattlePredictor:
+    """Class for predicting team vs team battles with a trained model."""
+
+    def __init__(self, model_path: str = "team_model.pkl") -> None:
+        self.model_path = model_path
+        self.model_data: Dict[str, Any] = {}
+        self.pokemon: pd.DataFrame = pd.DataFrame()
+        self.teams: pd.DataFrame = pd.DataFrame()
+        self.team_features: pd.DataFrame = pd.DataFrame()
+        self.team_types: Dict[int, List[tuple[str, str | None]]] = {}
+        self.feature_columns: List[str] = []
+        self.best_model: Any = None
+
+        self._load_model()
+
+    def _load_model(self) -> None:
+        if not os.path.exists(self.model_path):
+            print("⚙️  Team model not found, train it first...")
+            print("Run: python scripts/train_team_model.py")
+            sys.exit(1)
+
+        with open(self.model_path, "rb") as f:
+            self.model_data = pickle.load(f)
+
+        self.best_model = self.model_data["model"]
+        self.pokemon = self.model_data["pokemon"]
+        self.teams = self.model_data["teams"]
+        self.feature_columns = self.model_data["feature_columns"]
+
+        self.team_features = self.model_data.get("team_features", pd.DataFrame())
+        if self.team_features.empty:
+            self.team_features = build_team_features(self.pokemon, self.teams)
+
+        self.team_types = build_team_type_map(self.pokemon, self.teams)
+
+    def _get_team_members(self, team_id: int) -> pd.DataFrame:
+        row = self.teams[self.teams["team_id"] == team_id]
+        if row.empty:
+            raise ValueError(f"Team id {team_id} not found")
+        members = row.iloc[0][["0", "1", "2", "3", "4", "5"]].astype(int).tolist()
+        return self.pokemon[self.pokemon["#"].isin(members)]
+
+    def predict_team(self, team_a_id: int, team_b_id: int) -> Optional[int]:
+        features = build_single_matchup_features(
+            team_a_id,
+            team_b_id,
+            self.team_features,
+            self.team_types,
+            self.feature_columns,
+        )
+
+        prediction = self.best_model.predict(features)[0]
+        probs = self.best_model.predict_proba(features)[0]
+        probability = float(probs[1] if prediction == 1 else probs[0])
+
+        self._print_team_result(team_a_id, team_b_id, prediction, probability)
+
+        return team_a_id if prediction == 1 else team_b_id
+
+    def _print_team_result(
+        self,
+        team_a_id: int,
+        team_b_id: int,
+        prediction: int,
+        probability: float,
+    ) -> None:
+        team_a = self._get_team_members(team_a_id)
+        team_b = self._get_team_members(team_b_id)
+
+        lines = []
+        lines.append("\n" + "=" * 60)
+        lines.append(f"🧩 Team {team_a_id} vs Team {team_b_id}")
+        lines.append("=" * 60)
+
+        lines.append("\nTeam A")
+        for _, member in team_a.iterrows():
+            type2 = "" if pd.isna(member["Type 2"]) else f"/{member['Type 2']}"
+            lines.append(f"  - {member['Name']} ({member['Type 1']}{type2})")
+
+        lines.append("\nTeam B")
+        for _, member in team_b.iterrows():
+            type2 = "" if pd.isna(member["Type 2"]) else f"/{member['Type 2']}"
+            lines.append(f"  - {member['Name']} ({member['Type 1']}{type2})")
+
+        winner = team_a_id if prediction == 1 else team_b_id
+        lines.append("\nPrediction")
+        lines.append(f"  Winner: Team {winner}")
+        lines.append(f"  Win probability: {probability * 100:.1f}%")
+        lines.append("=" * 60 + "\n")
+        print("\n".join(lines))
+
+
 def main() -> None:
     """Main functie voor CLI."""
+    parser = argparse.ArgumentParser(description="Pokemon battle predictor")
+    parser.add_argument("pokemon1", nargs="?")
+    parser.add_argument("pokemon2", nargs="?")
+    parser.add_argument(
+        "--team",
+        nargs=2,
+        metavar=("TEAM_A", "TEAM_B"),
+        help="Predict team vs team using team ids",
+    )
+
+    args = parser.parse_args()
+
+    if args.team:
+        team_a = int(args.team[0])
+        team_b = int(args.team[1])
+        team_predictor = TeamBattlePredictor()
+        team_predictor.predict_team(team_a, team_b)
+        return
+
     predictor = BattlePredictor()
-    
-    # Verschillende gebruiksmogelijkheden
-    if len(sys.argv) == 3:
-        # Command line argumenten
-        pokemon1 = sys.argv[1]
-        pokemon2 = sys.argv[2]
-        predictor.predict_battle(pokemon1, pokemon2)
-    
-    elif len(sys.argv) == 1:
-        # Interactieve mode
+
+    if args.pokemon1 and args.pokemon2:
+        predictor.predict_battle(args.pokemon1, args.pokemon2)
+        return
+
+    if not args.pokemon1 and not args.pokemon2:
         print("⚔️  Pokémon Battle Predictor ⚔️")
         print("=" * 60)
         print(f"Database: {len(predictor.pokemon)} pokémon beschikbaar\n")
-        
+
         while True:
             print("\n" + "-" * 60)
             pokemon1 = input("🔴 Eerste pokémon (of 'quit' om te stoppen): ").strip()
-            if pokemon1.lower() in ['quit', 'exit', 'stop', 'q']:
+            if pokemon1.lower() in ["quit", "exit", "stop", "q"]:
                 print("\n👋 Bedankt voor het gebruiken van Battle Predictor!")
                 break
-            
+
             pokemon2 = input("🔵 Tweede pokémon: ").strip()
-            if pokemon2.lower() in ['quit', 'exit', 'stop', 'q']:
+            if pokemon2.lower() in ["quit", "exit", "stop", "q"]:
                 print("\n👋 Bedankt voor het gebruiken van Battle Predictor!")
                 break
-            
+
             predictor.predict_battle(pokemon1, pokemon2)
-    
-    else:
-        print("❌ Gebruik: python predict.py [pokemon1] [pokemon2]")
-        print("\nVoorbeelden:")
-        print("  python predict.py Pikachu Charizard")
-        print("  python predict.py   (voor interactieve mode)")
+        return
+
+    print("❌ Usage:")
+    print("  python predict.py Pikachu Charizard")
+    print("  python predict.py --team 1 2")
+    print("  python predict.py   (interactive mode)")
 
 
 if __name__ == "__main__":

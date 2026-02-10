@@ -36,6 +36,12 @@ pip install -r requirements.txt
 python scripts/train_model.py
 ```
 
+### Train the Team Model
+
+```bash
+python scripts/train_team_model.py
+```
+
 ### Predict Battles
 
 ```bash
@@ -45,6 +51,28 @@ python scripts/predict.py "Pikachu" "Charmander"
 Or run in interactive mode:
 ```bash
 python scripts/predict.py
+```
+
+### Predict Team Battles
+
+```bash
+python scripts/predict.py --team 1 2
+```
+
+### Launch the GUI
+
+```bash
+python scripts/gui_app.py
+```
+
+Or use the quick launchers:
+```bash
+python run.py
+```
+
+Windows:
+```bash
+start_gui.bat
 ```
 
 ### Generate Random Battles
@@ -57,6 +85,12 @@ python scripts/generate_battles.py --count 10
 
 ```bash
 python scripts/test_model.py
+```
+
+### Test Team Model
+
+```bash
+python scripts/test_team_model.py
 ```
 
 ## Project Structure

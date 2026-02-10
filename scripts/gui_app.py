@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 import pickle
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -17,6 +17,11 @@ import pandas as pd
 sys.path.append(str(Path(__file__).parent.parent / "types"))
 
 from pokemon_types import calculate_type_advantage, get_offensive_matchup
+from team_features import (
+    build_single_matchup_features,
+    build_team_features,
+    build_team_type_map,
+)
 
 
 class BattlePredictorGUI:
@@ -31,7 +36,14 @@ class BattlePredictorGUI:
         self.model = None
         self.pokemon = pd.DataFrame()
 
+        self.team_model = None
+        self.teams = pd.DataFrame()
+        self.team_features = pd.DataFrame()
+        self.team_types: Dict[int, List[tuple[str, str | None]]] = {}
+        self.team_feature_columns: List[str] = []
+
         self._load_model()
+        self._load_team_model()
         self._build_ui()
 
     def _load_model(self) -> None:
@@ -50,6 +62,24 @@ class BattlePredictorGUI:
         self.model = model_data["model"]
         self.pokemon = model_data["pokemon"]
 
+    def _load_team_model(self) -> None:
+        model_path = Path(__file__).parent.parent / "team_model.pkl"
+        if not model_path.exists():
+            return
+
+        with open(model_path, "rb") as f:
+            model_data: Dict[str, Any] = pickle.load(f)
+
+        self.team_model = model_data["model"]
+        self.teams = model_data["teams"].rename(columns={"#": "team_id"})
+        self.team_feature_columns = model_data["feature_columns"]
+        self.team_features = model_data.get("team_features", pd.DataFrame())
+
+        if self.team_features.empty:
+            self.team_features = build_team_features(self.pokemon, self.teams)
+
+        self.team_types = build_team_type_map(self.pokemon, self.teams)
+
     def _build_ui(self) -> None:
         main = ttk.Frame(self.root, padding=16)
         main.pack(fill=tk.BOTH, expand=True)
@@ -57,51 +87,137 @@ class BattlePredictorGUI:
         title = ttk.Label(main, text="Pokemon Battle Predictor", font=("Segoe UI", 16, "bold"))
         title.pack(pady=(0, 12))
 
-        selector = ttk.Frame(main)
+        self.pokemon_names = sorted(self.pokemon["Name"].astype(str).tolist())
+        self.team_ids = (
+            sorted(self.teams["team_id"].astype(int).tolist())
+            if not self.teams.empty
+            else []
+        )
+
+        notebook = ttk.Notebook(main)
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        pokemon_tab = ttk.Frame(notebook)
+        team_tab = ttk.Frame(notebook)
+        notebook.add(pokemon_tab, text="Pokemon")
+        notebook.add(team_tab, text="Team")
+
+        self._build_pokemon_tab(pokemon_tab)
+        self._build_team_tab(team_tab)
+
+    def _build_pokemon_tab(self, parent: ttk.Frame) -> None:
+        selector = ttk.Frame(parent)
         selector.pack(fill=tk.X, pady=(0, 8))
 
         ttk.Label(selector, text="Pokemon 1").grid(row=0, column=0, sticky=tk.W)
         ttk.Label(selector, text="Pokemon 2").grid(row=0, column=1, sticky=tk.W)
 
-        self.pokemon_names = sorted(self.pokemon["Name"].astype(str).tolist())
+        self.pokemon_p1_var = tk.StringVar()
+        self.pokemon_p2_var = tk.StringVar()
 
-        self.p1_var = tk.StringVar(value=self.pokemon_names[0] if self.pokemon_names else "")
-        self.p2_var = tk.StringVar(value=self.pokemon_names[1] if len(self.pokemon_names) > 1 else "")
-
-        self.p1_combo = ttk.Combobox(selector, textvariable=self.p1_var, values=self.pokemon_names, state="normal")
-        self.p2_combo = ttk.Combobox(selector, textvariable=self.p2_var, values=self.pokemon_names, state="normal")
-        self.p1_combo.grid(row=1, column=0, sticky=tk.EW, padx=(0, 8))
-        self.p2_combo.grid(row=1, column=1, sticky=tk.EW)
+        self.pokemon_p1_combo = ttk.Combobox(
+            selector, textvariable=self.pokemon_p1_var, values=self.pokemon_names, state="normal"
+        )
+        self.pokemon_p2_combo = ttk.Combobox(
+            selector, textvariable=self.pokemon_p2_var, values=self.pokemon_names, state="normal"
+        )
+        self.pokemon_p1_combo.grid(row=1, column=0, sticky=tk.EW, padx=(0, 8))
+        self.pokemon_p2_combo.grid(row=1, column=1, sticky=tk.EW)
 
         selector.columnconfigure(0, weight=1)
         selector.columnconfigure(1, weight=1)
 
-        buttons = ttk.Frame(main)
+        buttons = ttk.Frame(parent)
         buttons.pack(fill=tk.X, pady=(8, 8))
 
-        predict_btn = ttk.Button(buttons, text="Predict", command=self._on_predict)
-        swap_btn = ttk.Button(buttons, text="Swap", command=self._on_swap)
-        clear_btn = ttk.Button(buttons, text="Clear Output", command=self._on_clear)
+        ttk.Button(buttons, text="Predict", command=self._on_predict_pokemon).pack(side=tk.LEFT)
+        ttk.Button(buttons, text="Swap", command=self._on_swap_pokemon).pack(side=tk.LEFT, padx=(8, 8))
+        ttk.Button(buttons, text="Clear Output", command=self._on_clear_pokemon).pack(side=tk.LEFT)
 
-        predict_btn.pack(side=tk.LEFT)
-        swap_btn.pack(side=tk.LEFT, padx=(8, 8))
-        clear_btn.pack(side=tk.LEFT)
+        self.pokemon_output = tk.Text(parent, height=18, wrap=tk.WORD, state=tk.DISABLED)
+        self.pokemon_output.pack(fill=tk.BOTH, expand=True)
 
-        self.output = tk.Text(main, height=18, wrap=tk.WORD, state=tk.DISABLED)
-        self.output.pack(fill=tk.BOTH, expand=True)
+        if self.pokemon_names:
+            self.pokemon_p1_var.set(self.pokemon_names[0])
+            self.pokemon_p2_var.set(
+                self.pokemon_names[1] if len(self.pokemon_names) > 1 else self.pokemon_names[0]
+            )
 
-    def _on_swap(self) -> None:
-        p1 = self.p1_var.get()
-        p2 = self.p2_var.get()
-        self.p1_var.set(p2)
-        self.p2_var.set(p1)
+    def _build_team_tab(self, parent: ttk.Frame) -> None:
+        if self.team_model is None:
+            ttk.Label(
+                parent,
+                text="team_model.pkl not found. Run scripts/train_team_model.py first.",
+                foreground="#aa0000",
+            ).pack(anchor=tk.W)
 
-    def _on_clear(self) -> None:
-        self._set_output("")
+        selector = ttk.Frame(parent)
+        selector.pack(fill=tk.X, pady=(8, 8))
 
-    def _on_predict(self) -> None:
-        p1_name = self.p1_var.get().strip()
-        p2_name = self.p2_var.get().strip()
+        ttk.Label(selector, text="Team A (6 slots)").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(selector, text="Team B (6 slots)").grid(row=0, column=1, sticky=tk.W)
+
+        self.team_a_vars: List[tk.StringVar] = []
+        self.team_b_vars: List[tk.StringVar] = []
+        self.team_a_combos: List[ttk.Combobox] = []
+        self.team_b_combos: List[ttk.Combobox] = []
+
+        for idx in range(6):
+            a_var = tk.StringVar()
+            b_var = tk.StringVar()
+            self.team_a_vars.append(a_var)
+            self.team_b_vars.append(b_var)
+
+            a_combo = ttk.Combobox(
+                selector, textvariable=a_var, values=self.pokemon_names, state="normal"
+            )
+            b_combo = ttk.Combobox(
+                selector, textvariable=b_var, values=self.pokemon_names, state="normal"
+            )
+            a_combo.grid(row=idx + 1, column=0, sticky=tk.EW, padx=(0, 8), pady=2)
+            b_combo.grid(row=idx + 1, column=1, sticky=tk.EW, pady=2)
+
+            self.team_a_combos.append(a_combo)
+            self.team_b_combos.append(b_combo)
+
+        selector.columnconfigure(0, weight=1)
+        selector.columnconfigure(1, weight=1)
+
+        buttons = ttk.Frame(parent)
+        buttons.pack(fill=tk.X, pady=(0, 8))
+
+        self.team_predict_btn = ttk.Button(buttons, text="Predict", command=self._on_predict_team)
+        self.team_predict_btn.pack(side=tk.LEFT)
+        ttk.Button(buttons, text="Swap", command=self._on_swap_team).pack(side=tk.LEFT, padx=(8, 8))
+        ttk.Button(buttons, text="Clear Output", command=self._on_clear_team).pack(side=tk.LEFT)
+
+        self.team_output = tk.Text(parent, height=16, wrap=tk.WORD, state=tk.DISABLED)
+        self.team_output.pack(fill=tk.BOTH, expand=True)
+
+        if self.team_model is None:
+            self.team_predict_btn.configure(state=tk.DISABLED)
+            for combo in self.team_a_combos + self.team_b_combos:
+                combo.configure(state="disabled")
+
+        if self.pokemon_names:
+            for idx in range(6):
+                self.team_a_vars[idx].set(self.pokemon_names[idx % len(self.pokemon_names)])
+                self.team_b_vars[idx].set(
+                    self.pokemon_names[(idx + 1) % len(self.pokemon_names)]
+                )
+
+    def _on_swap_pokemon(self) -> None:
+        p1 = self.pokemon_p1_var.get()
+        p2 = self.pokemon_p2_var.get()
+        self.pokemon_p1_var.set(p2)
+        self.pokemon_p2_var.set(p1)
+
+    def _on_clear_pokemon(self) -> None:
+        self._set_output(self.pokemon_output, "")
+
+    def _on_predict_pokemon(self) -> None:
+        p1_name = self.pokemon_p1_var.get().strip()
+        p2_name = self.pokemon_p2_var.get().strip()
 
         if not p1_name or not p2_name:
             messagebox.showwarning("Missing selection", "Please select two Pokemon.")
@@ -118,7 +234,34 @@ class BattlePredictorGUI:
             return
 
         output = self._predict_and_format(p1, p2)
-        self._set_output(output)
+        self._set_output(self.pokemon_output, output)
+
+    def _on_swap_team(self) -> None:
+        for idx in range(6):
+            a_val = self.team_a_vars[idx].get()
+            b_val = self.team_b_vars[idx].get()
+            self.team_a_vars[idx].set(b_val)
+            self.team_b_vars[idx].set(a_val)
+
+    def _on_clear_team(self) -> None:
+        self._set_output(self.team_output, "")
+
+    def _on_predict_team(self) -> None:
+        team_a_names = [var.get().strip() for var in self.team_a_vars]
+        team_b_names = [var.get().strip() for var in self.team_b_vars]
+
+        if any(not name for name in team_a_names + team_b_names):
+            messagebox.showwarning("Missing selection", "Please fill all 6 slots for each team.")
+            return
+
+        team_a_ids = self._names_to_ids(team_a_names)
+        team_b_ids = self._names_to_ids(team_b_names)
+        if team_a_ids is None or team_b_ids is None:
+            messagebox.showwarning("Not found", "One or more Pokemon could not be found.")
+            return
+
+        output = self._predict_team_and_format(team_a_ids, team_b_ids, team_a_names, team_b_names)
+        self._set_output(self.team_output, output)
 
     def _find_pokemon(self, name: str) -> pd.Series | None:
         result = self.pokemon[self.pokemon["Name"].str.lower() == name.lower()]
@@ -200,11 +343,84 @@ class BattlePredictorGUI:
 
         return "\n".join(lines)
 
-    def _set_output(self, text: str) -> None:
-        self.output.configure(state=tk.NORMAL)
-        self.output.delete("1.0", tk.END)
-        self.output.insert(tk.END, text)
-        self.output.configure(state=tk.DISABLED)
+    def _predict_team_and_format(
+        self,
+        team_a_ids: List[int],
+        team_b_ids: List[int],
+        team_a_names: List[str],
+        team_b_names: List[str],
+    ) -> str:
+        temp_teams = pd.DataFrame(
+            [
+                [1] + team_a_ids,
+                [2] + team_b_ids,
+            ],
+            columns=["team_id", "0", "1", "2", "3", "4", "5"],
+        )
+
+        temp_features = build_team_features(self.pokemon, temp_teams)
+        temp_types = build_team_type_map(self.pokemon, temp_teams)
+
+        features = build_single_matchup_features(
+            1,
+            2,
+            temp_features,
+            temp_types,
+            self.team_feature_columns,
+        )
+
+        prediction = self.team_model.predict(features)[0]
+        probs = self.team_model.predict_proba(features)[0]
+        probability = float(probs[1] if prediction == 1 else probs[0])
+
+        lines = []
+        lines.append("Team Battle Prediction")
+        lines.append("=" * 60)
+        lines.append("Custom Team A vs Custom Team B")
+        lines.append("")
+
+        lines.append("Team A")
+        for name in team_a_names:
+            lines.append(f"  - {name}")
+        lines.append("")
+
+        lines.append("Team B")
+        for name in team_b_names:
+            lines.append(f"  - {name}")
+        lines.append("")
+
+        winner = "Team A" if prediction == 1 else "Team B"
+        lines.append("Prediction")
+        lines.append(f"  Winner: {winner}")
+        lines.append(f"  Win probability: {probability * 100:.1f}%")
+
+        return "\n".join(lines)
+
+    def _set_output(self, widget: tk.Text, text: str) -> None:
+        widget.configure(state=tk.NORMAL)
+        widget.delete("1.0", tk.END)
+        widget.insert(tk.END, text)
+        widget.configure(state=tk.DISABLED)
+
+    def _get_team_members(self, team_id: int) -> pd.DataFrame:
+        row = self.teams[self.teams["team_id"] == team_id]
+        if row.empty:
+            return pd.DataFrame()
+        members = row.iloc[0][["0", "1", "2", "3", "4", "5"]].astype(int).tolist()
+        return self.pokemon[self.pokemon["#"].isin(members)]
+
+    def _names_to_ids(self, names: List[str]) -> List[int] | None:
+        lookup = {
+            str(name).lower(): int(pid)
+            for pid, name in self.pokemon[["#", "Name"]].itertuples(index=False)
+        }
+        ids: List[int] = []
+        for name in names:
+            pid = lookup.get(name.lower())
+            if pid is None:
+                return None
+            ids.append(pid)
+        return ids
 
 
 def main() -> None:
